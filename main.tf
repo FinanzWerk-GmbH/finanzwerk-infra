@@ -95,3 +95,37 @@ resource "aws_eip" "nat_gateway" {
     "Name" = "nat_gateway_eip"
   }
 }
+
+
+resource "aws_s3_bucket" "log_storage" {
+  bucket = "log_storage"
+  tags = {
+    Name = "Log Storage"
+  }
+}
+
+resource "aws_s3_bucket_versioning" "log_storage" {
+  bucket = aws_s3_bucket.log_storage.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "log_storage" {
+  bucket = aws_s3_bucket.log_storage.id
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+
+resource "aws_cloudtrail" "main" {
+  name                  = "main"
+  s3_bucket_name        = aws_s3_bucket.log_storage.id
+  is_multi_region_trail = true
+  tags = {
+    "Name" = "Main Cloudtrail"
+  }
+}
