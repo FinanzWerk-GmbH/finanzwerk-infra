@@ -1,0 +1,31 @@
+permissions: 
+    id-token: write
+    contents: read
+
+on:
+    workflow_dispatch:
+
+jobs:
+    deploy:
+        name: deploy
+        runs-on: ubuntu-latest
+        permissions:
+            id-token: write
+            contents: read
+        steps:
+            - uses: actions/checkout@v3
+            - name: Configure AWS Credentials
+              uses: aws-actions/configure-aws-credentials@v4
+              with:
+                role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME }} #TODO
+                aws-region: ${{ vars.AWS_REGION }} #TODO
+            - name: Verify IAM  Role Assumption
+              run: aws sts get-caller-identity
+            - name: Install Terraform
+              uses: hashicorp/setup-terraform@v3
+            - name: Initialize Terraform
+              run: terraform init
+            - name: Terraform Plan
+              run: terraform plan
+            - name: Terraform Apply
+              run: terraform apply -auto-approve tf.plan
