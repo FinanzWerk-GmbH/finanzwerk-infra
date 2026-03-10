@@ -1,5 +1,5 @@
 resource "aws_s3_bucket" "raw_ingestion_data" {
-  bucket = "finanzwerk-cloudtrail-log-storage"
+  bucket = "finanzwerk-raw-ingestion-data"
 }
 
 resource "aws_s3_bucket_versioning" "raw_ingestion_data" {
@@ -20,7 +20,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "raw_ingestion_dat
 
 
 resource "aws_s3_bucket" "processed_data" {
-  bucket = "finanzwerk-cloudtrail-log-storage"
+  bucket = "finanzwerk-processed-data"
 }
 
 
