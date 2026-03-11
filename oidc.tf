@@ -3,7 +3,7 @@ resource "aws_iam_openid_connect_provider" "default" {
   client_id_list = ["sts.amazonaws.com‍"]
 }
 
-data "aws_iam_policy_document" "oicd" {
+data "aws_iam_policy_document" "oidc" {
   statement {
     actions = ["sts:AssumeRoleWithWebIdentity"]
     principals {
@@ -12,20 +12,20 @@ data "aws_iam_policy_document" "oicd" {
     }
     condition {
       test     = "StringEquals"
-      values   = ["sts.amazon.com"]
+      values   = ["sts.amazonaws.com"]
       variable = "token.actions.githubusercontent.com:aud"
     }
     condition {
-      test     = ["StringLike"]
+      test     = "StringLike"
       values   = ["repo:FinanzWerk-GmbH/*"]
       variable = "token.actions.githubusercontent.com:sub"
     }
   }
 }
 
-resource "aws_iam_role" "github_oicd" {
-  name               = "github-oicd-role"
-  assume_role_policy = data.aws_iam_policy_document.oicd.json
+resource "aws_iam_role" "github_oidc" {
+  name               = "github-oidc-role"
+  assume_role_policy = data.aws_iam_policy_document.oidc.json
 }
 
 data "aws_iam_policy_document" "cicd_terraform" {
@@ -42,11 +42,11 @@ resource "aws_iam_policy" "cicd_terraform" {
 }
 
 resource "aws_iam_role_policy_attachment" "cicd_terraform" {
-  role       = aws_iam_role.github_oicd.name
+  role       = aws_iam_role.github_oidc.name
   policy_arn = aws_iam_policy.cicd_terraform.arn
 }
 
-output "oicd_github_role_arn" {
-  description = "The arn of the oicd github iam role"
-  value       = aws_iam_role.github_oicd.arn
+output "oidc_github_role_arn" {
+  description = "The arn of the oidc github iam role"
+  value       = aws_iam_role.github_oidc.arn
 }
