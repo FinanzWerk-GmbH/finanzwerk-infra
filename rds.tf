@@ -25,6 +25,8 @@ module "rds_postgres_operational_data_warehouse" {
 
   backup_retention_period = 1
 
+  skip_final_snapshot = true
+
   db_name  = "postgres"
   username = "db_admin"
   port     = 5432
