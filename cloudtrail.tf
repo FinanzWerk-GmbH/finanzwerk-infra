@@ -34,6 +34,11 @@ data "aws_iam_policy_document" "cloudtrail_s3_log_storage_policy" {
       identifiers = ["cloudtrail.amazonaws.com"]
     }
     resources = [aws_s3_bucket.cloudtrail_log_storage.arn]
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceArn"
+      values   = ["arn:aws:cloudtrail:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:trail/main"]
+    }
   }
 
   statement {
@@ -44,11 +49,16 @@ data "aws_iam_policy_document" "cloudtrail_s3_log_storage_policy" {
       type        = "Service"
       identifiers = ["cloudtrail.amazonaws.com"]
     }
-    resources = ["${aws_s3_bucket.cloudtrail_log_storage.arn}/*"]
+    resources = ["${aws_s3_bucket.cloudtrail_log_storage.arn}/AWSLogs/${data.aws_caller_identity.current.account_id}/*"]
     condition {
       test     = "StringEquals"
       variable = "s3:x-amz-acl"
       values   = ["bucket-owner-full-control"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceArn"
+      values   = ["arn:aws:cloudtrail:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:trail/main"]
     }
   }
 }

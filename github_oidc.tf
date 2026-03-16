@@ -1,14 +1,14 @@
-resource "aws_iam_openid_connect_provider" "default" {
+resource "aws_iam_openid_connect_provider" "github" {
   url            = "https://token.actions.githubusercontent.com"
   client_id_list = ["sts.amazonaws.com‍"]
 }
 
-data "aws_iam_policy_document" "oidc" {
+data "aws_iam_policy_document" "github_oidc" {
   statement {
     actions = ["sts:AssumeRoleWithWebIdentity"]
     principals {
       type        = "Federated"
-      identifiers = [aws_iam_openid_connect_provider.default.arn]
+      identifiers = [aws_iam_openid_connect_provider.github.arn]
     }
     condition {
       test     = "StringEquals"
@@ -25,7 +25,7 @@ data "aws_iam_policy_document" "oidc" {
 
 resource "aws_iam_role" "github_oidc" {
   name               = "github-oidc-role"
-  assume_role_policy = data.aws_iam_policy_document.oidc.json
+  assume_role_policy = data.aws_iam_policy_document.github_oidc.json
 }
 
 data "aws_iam_policy_document" "cicd_terraform" {
