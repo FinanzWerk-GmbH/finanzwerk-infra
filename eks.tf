@@ -40,7 +40,7 @@ data "aws_iam_policy_document" "airflow_worker_trust" {
     }
     condition {
       test     = "StringEquals"
-      variable = "${module.eks.cluster_oidc_issuer_url}:sub"
+      variable = "${replace(module.eks.cluster_oidc_issuer_url, "https://", "")}:sub"
       values   = ["system:serviceaccount:airflow:airflow-worker"]
     }
   }
@@ -80,7 +80,7 @@ data "aws_iam_policy_document" "spark_trust" {
     }
     condition {
       test     = "StringEquals"
-      variable = "${module.eks.cluster_oidc_issuer_url}:sub"
+      variable = "${replace(module.eks.cluster_oidc_issuer_url, "https://", "")}:sub"
       values   = ["system:serviceaccount:spark:spark"]
     }
   }
@@ -110,6 +110,59 @@ output "airflow_worker_role_arn" {
 
 output "spark_role_arn" {
   value = aws_iam_role.spark.arn
+}
+
+# ── Storage ───────────────────────────────────────────────────────────────────
+
+resource "kubernetes_storage_class_v1" "ebs_csi" {
+  metadata {
+    name = "ebs-csi"
+    annotations = {
+      "storageclass.kubernetes.io/is-default-class" = "true"
+    }
+  }
+  storage_provisioner    = "ebs.csi.eks.amazonaws.com"
+  volume_binding_mode    = "WaitForFirstConsumer"
+  allow_volume_expansion = true
+  parameters = {
+    type = "gp3"
+  }
+}
+
+# ── Airflow secrets ───────────────────────────────────────────────────────────
+
+resource "random_password" "airflow_db" {
+  length  = 32
+  special = false
+}
+
+resource "random_bytes" "airflow_fernet_key" {
+  length = 32
+}
+
+locals {
+  # Fernet requires URL-safe base64 (- and _ instead of + and /)
+  airflow_fernet_key = replace(replace(random_bytes.airflow_fernet_key.base64, "+", "-"), "/", "_")
+}
+
+resource "kubernetes_secret" "airflow_metadata" {
+  metadata {
+    name      = "airflow-metadata-secret"
+    namespace = kubernetes_namespace.airflow.metadata[0].name
+  }
+  data = {
+    connection = "postgresql+psycopg2://db_admin:${random_password.airflow_db.result}@${module.rds_postgres_operational_data_warehouse.db_instance_address}:5432/postgres"
+  }
+}
+
+resource "kubernetes_secret" "airflow_fernet_key" {
+  metadata {
+    name      = "airflow-fernet-key"
+    namespace = kubernetes_namespace.airflow.metadata[0].name
+  }
+  data = {
+    fernet-key = local.airflow_fernet_key
+  }
 }
 
 # ── Namespaces ────────────────────────────────────────────────────────────────
@@ -237,18 +290,19 @@ resource "helm_release" "airflow" {
   chart      = "airflow"
   version    = "1.21.0"
   namespace  = kubernetes_namespace.airflow.metadata[0].name
+  wait             = true
+  timeout          = 600
+  force_update     = true
+  cleanup_on_fail  = true
 
   values = [
-    yamlencode({
-      executor = "KubernetesExecutor"
-      workers = {
-        serviceAccount = {
-          create = false
-          name   = kubernetes_service_account.airflow_worker.metadata[0].name
-        }
-      }
+    templatefile("${path.module}/airflow-values.yaml.tpl", {
+      worker_sa_name   = kubernetes_service_account.airflow_worker.metadata[0].name
+      airflow_dag_repo = var.airflow_dag_repo
     })
   ]
+
+  depends_on = [helm_release.aws_lbc]
 }
 
 # ── Helm: Spark operator ───────────────────────────────────────────────────────
@@ -259,26 +313,132 @@ resource "helm_release" "spark_operator" {
   chart      = "spark-operator"
   version    = "2.5.0"
   namespace  = kubernetes_namespace.spark.metadata[0].name
+
+  depends_on = [helm_release.aws_lbc]
+}
+
+# ── AWS Load Balancer Controller ───────────────────────────────────────────────
+
+resource "aws_iam_role" "aws_lbc" {
+  name               = "aws-load-balancer-controller"
+  assume_role_policy = data.aws_iam_policy_document.aws_lbc_trust.json
+}
+
+data "aws_iam_policy_document" "aws_lbc_trust" {
+  statement {
+    effect  = "Allow"
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+    principals {
+      type        = "Federated"
+      identifiers = [module.eks.oidc_provider_arn]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "${replace(module.eks.cluster_oidc_issuer_url, "https://", "")}:sub"
+      values   = ["system:serviceaccount:kube-system:aws-load-balancer-controller"]
+    }
+  }
+}
+
+data "aws_iam_policy_document" "aws_lbc_permissions" {
+  statement {
+    effect    = "Allow"
+    actions   = ["*"]
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_policy" "aws_lbc" {
+  name   = "aws-load-balancer-controller-permissions"
+  policy = data.aws_iam_policy_document.aws_lbc_permissions.json
+}
+
+resource "aws_iam_role_policy_attachment" "aws_lbc" {
+  role       = aws_iam_role.aws_lbc.name
+  policy_arn = aws_iam_policy.aws_lbc.arn
+}
+
+resource "kubernetes_service_account" "aws_lbc" {
+  metadata {
+    name      = "aws-load-balancer-controller"
+    namespace = "kube-system"
+    annotations = {
+      "eks.amazonaws.com/role-arn" = aws_iam_role.aws_lbc.arn
+    }
+  }
+}
+
+resource "helm_release" "aws_lbc" {
+  name       = "aws-load-balancer-controller"
+  repository = "https://aws.github.io/eks-charts"
+  chart      = "aws-load-balancer-controller"
+  version    = "3.3.0"
+  namespace  = "kube-system"
+
+  values = [
+    yamlencode({
+      clusterName = module.eks.cluster_name
+      serviceAccount = {
+        create = false
+        name   = kubernetes_service_account.aws_lbc.metadata[0].name
+      }
+      vpcId  = aws_vpc.main.id
+      region = data.aws_region.current.name
+    })
+  ]
+
+  wait       = true
+  depends_on = [kubernetes_service_account.aws_lbc]
+}
+
+# ── Ingress: Airflow ───────────────────────────────────────────────────────────
+
+resource "kubernetes_ingress_v1" "airflow" {
+  metadata {
+    name      = "airflow"
+    namespace = kubernetes_namespace.airflow.metadata[0].name
+    annotations = {
+      "kubernetes.io/ingress.class"           = "alb"
+      "alb.ingress.kubernetes.io/scheme"      = "internet-facing"
+      "alb.ingress.kubernetes.io/target-type" = "ip"
+      "alb.ingress.kubernetes.io/subnets"     = "${aws_subnet.public_a.id},${aws_subnet.public_b.id}"
+    }
+  }
+  spec {
+    rule {
+      http {
+        path {
+          path      = "/"
+          path_type = "Prefix"
+          backend {
+            service {
+              name = "airflow-api-server"
+              port {
+                number = 8080
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  depends_on = [helm_release.aws_lbc]
+}
+
+data "aws_eks_cluster_auth" "main" {
+  name = module.eks.cluster_name
 }
 
 provider "kubernetes" {
   host                   = module.eks.cluster_endpoint
   cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
-  exec {
-    api_version = "client.authentication.k8s.io/v1beta1"
-    command     = "aws"
-    args        = ["eks", "get-token", "--cluster-name", module.eks.cluster_name, "--profile", "dev"]
-  }
+  token                  = data.aws_eks_cluster_auth.main.token
 }
 
 provider "helm" {
   kubernetes {
     host                   = module.eks.cluster_endpoint
     cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
-    exec {
-      api_version = "client.authentication.k8s.io/v1beta1"
-      command     = "aws"
-      args        = ["eks", "get-token", "--cluster-name", module.eks.cluster_name, "--profile", "dev"]
-    }
+    token                  = data.aws_eks_cluster_auth.main.token
   }
 }

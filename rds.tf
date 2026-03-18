@@ -27,9 +27,12 @@ module "rds_postgres_operational_data_warehouse" {
 
   skip_final_snapshot = true
 
-  db_name  = "postgres"
-  username = "db_admin"
-  port     = 5432
+  db_name              = "postgres"
+  username             = "db_admin"
+  password_wo          = random_password.airflow_db.result
+  password_wo_version  = 1
+  manage_master_user_password = false
+  port                 = 5432
 
   iam_database_authentication_enabled = true
 }
@@ -46,8 +49,15 @@ module "security_group_rds_postgres_operational_data_warehouse" {
       from_port                = 5432
       to_port                  = 5432
       protocol                 = "tcp"
-      description              = "PostgreSQL access from within VPC"
+      description              = "PostgreSQL access from data pipeline"
       source_security_group_id = module.security_group_data_pipeline.security_group_id
+    },
+    {
+      from_port                = 5432
+      to_port                  = 5432
+      protocol                 = "tcp"
+      description              = "PostgreSQL access from EKS nodes"
+      source_security_group_id = module.eks.cluster_security_group_id
     }
   ]
 }
