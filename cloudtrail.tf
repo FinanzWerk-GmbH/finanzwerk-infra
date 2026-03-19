@@ -37,7 +37,7 @@ data "aws_iam_policy_document" "cloudtrail_s3_log_storage_policy" {
     condition {
       test     = "StringEquals"
       variable = "aws:SourceArn"
-      values   = ["arn:aws:cloudtrail:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:trail/main"]
+      values   = ["arn:aws:cloudtrail:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:trail/main"]
     }
   }
 
@@ -58,7 +58,7 @@ data "aws_iam_policy_document" "cloudtrail_s3_log_storage_policy" {
     condition {
       test     = "StringEquals"
       variable = "aws:SourceArn"
-      values   = ["arn:aws:cloudtrail:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:trail/main"]
+      values   = ["arn:aws:cloudtrail:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:trail/main"]
     }
   }
 }
@@ -67,4 +67,5 @@ resource "aws_cloudtrail" "main" {
   name                  = "main"
   s3_bucket_name        = aws_s3_bucket.cloudtrail_log_storage.id
   is_multi_region_trail = true
+  depends_on            = [aws_s3_bucket_policy.cloudtrail_s3_log_storage]
 }

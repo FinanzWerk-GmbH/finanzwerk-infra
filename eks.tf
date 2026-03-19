@@ -2,7 +2,7 @@ module "eks" {
   source  = "terraform-aws-modules/eks/aws"
   version = "~> 21.0"
 
-  name               = "example"
+  name               = "finanzwerk-cluster"
   kubernetes_version = "1.33"
 
   endpoint_public_access = true
@@ -285,15 +285,15 @@ resource "kubernetes_role" "data_tools_developer" {
 # ── Helm: Airflow ──────────────────────────────────────────────────────────────
 
 resource "helm_release" "airflow" {
-  name       = "airflow"
-  repository = "https://airflow.apache.org"
-  chart      = "airflow"
-  version    = "1.21.0"
-  namespace  = kubernetes_namespace.airflow.metadata[0].name
-  wait             = true
-  timeout          = 600
-  force_update     = true
-  cleanup_on_fail  = true
+  name            = "airflow"
+  repository      = "https://airflow.apache.org"
+  chart           = "airflow"
+  version         = "1.21.0"
+  namespace       = kubernetes_namespace.airflow.metadata[0].name
+  wait            = true
+  timeout         = 600
+  force_update    = true
+  cleanup_on_fail = true
 
   values = [
     templatefile("${path.module}/airflow-values.yaml.tpl", {
@@ -383,7 +383,7 @@ resource "helm_release" "aws_lbc" {
         name   = kubernetes_service_account.aws_lbc.metadata[0].name
       }
       vpcId  = aws_vpc.main.id
-      region = data.aws_region.current.name
+      region = data.aws_region.current.region
     })
   ]
 
@@ -426,7 +426,8 @@ resource "kubernetes_ingress_v1" "airflow" {
 }
 
 data "aws_eks_cluster_auth" "main" {
-  name = module.eks.cluster_name
+  name       = module.eks.cluster_name
+  depends_on = [module.eks]
 }
 
 provider "kubernetes" {
