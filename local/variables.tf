@@ -1,0 +1,69 @@
+variable "minikube_storage_class" {
+  default = "standard"
+}
+
+variable "nginx_ingress_classname" {
+  default = "nginx"
+}
+
+
+# namespaces
+variable "data_core_namespace" {
+  default = "data-core"
+}
+variable "postgres_namespace" {
+  default = "postgres"
+}
+variable "minio_namespace" {
+  default = "minio"
+}
+variable "vault_namespace" {
+  default = "vault"
+}
+
+
+# minio
+variable "minio_root_username" {
+  default = "admin"
+}
+variable "minio_root_password" {
+  default = "admin_password"
+}
+variable "minio_api_host" {
+  default = "minio-api.local"
+}
+variable "minio_initial_buckets" {
+  type    = list(string)
+  default = ["finanzwerk-raw", "finanzwerk-processed", "finanzwerk-scripts", "backups"]
+}
+
+# Postgres
+variable "postgres_finanzwerk_db" {
+  default = "finanzwerk"
+}
+variable "postgres_finanzwerk_owner_username" {
+  default = "admin"
+}
+variable "postgres_finanzwerk_owner_password" {
+  default = "admin_password"
+}
+variable "postgres_finanzwerk_readwrite_username" {
+  default = "readwrite"
+}
+variable "postgres_finanzwerk_readwrite_password" {
+  default = "readwrite_password"
+}
+variable "postgres_finanzwerk_readonly_username" {
+  default = "readonly"
+}
+variable "postgres_finanzwerk_readonly_password" {
+  default = "readonly_password"
+}
+variable "postgres_backup_s3_destination" {
+  default = "s3://backups/postgres"
+}
+
+# vault
+variable "vault_host" {
+  default = "vault.local"
+}
