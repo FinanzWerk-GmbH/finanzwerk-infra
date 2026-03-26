@@ -1,7 +1,8 @@
 resource "helm_release" "vault" {
+  depends_on = [kubernetes_namespace_v1.vault_namespace]
   name       = "vault"
   repository = "https://helm.releases.hashicorp.com"
-  chart      = "hashicorp/vault"
+  chart      = "vault"
   namespace  = var.vault_namespace
   set = [
     {
@@ -27,12 +28,10 @@ resource "helm_release" "vault" {
     {
       name  = "server.ingress.ingressClassName"
       value = var.nginx_ingress_classname
-    }
-  ]
-  set_list = [
+    },
     {
       name  = "server.ingress.hosts[0].host"
-      value = var.vault_host
+      value = var.vault_ingress_host
     }
   ]
 }
@@ -56,52 +55,71 @@ resource "kubernetes_job_v1" "vault_init" {
           command = [
             "/bin/sh", "-c",
             <<-EOT
-              # Wait for Vault to be ready
-              until vault status 2>/dev/null; do
+              # Install dependencies
+              apk add --no-cache curl jq
+
+              # Install kubectl
+              curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+              chmod +x kubectl && mv kubectl /usr/local/bin/
+
+              # Wait for Vault to be reachable
+              until curl -s http://vault:8200/v1/sys/health | grep -q "initialized"; do
                 echo "Waiting for Vault..."
                 sleep 3
               done
 
-              # Init Vault (only if not already initialized)
-              if ! vault status | grep -q "Initialized.*true"; then
-                vault operator init -key-shares=1 -key-threshold=1 -format=json > /tmp/init.json
-                UNSEAL_KEY=$(cat /tmp/init.json | jq -r '.unseal_keys_b64[0]')
-                ROOT_TOKEN=$(cat /tmp/init.json | jq -r '.root_token')
+              INIT_STATUS=$(curl -s http://vault:8200/v1/sys/health | jq -r '.initialized')
 
-                vault operator unseal $UNSEAL_KEY
+              if [ "$INIT_STATUS" = "false" ]; then
+                echo "Initializing Vault..."
+                curl -s -X PUT http://vault:8200/v1/sys/init \
+                  -d '{"secret_shares":1,"secret_threshold":1}' > /tmp/init.json
 
-                # Save keys to a Kubernetes secret for later use
+                cat /tmp/init.json
+
+                UNSEAL_KEY=$(jq -r '.keys_base64[0]' /tmp/init.json)
+                ROOT_TOKEN=$(jq -r '.root_token' /tmp/init.json)
+
+                echo "Saving keys..."
                 kubectl patch secret vault-init-keys \
-                -n ${var.vault_namespace} \
-                -p "{\"data\":{\"unseal-key\":\"$(echo -n $UNSEAL_KEY | base64)\",\"root-token\":\"$(echo -n $ROOT_TOKEN | base64)\"}}"
+                  -n ${var.vault_namespace} \
+                  -p "{\"data\":{\"unseal-key\":\"$(echo -n $UNSEAL_KEY | base64)\",\"root-token\":\"$(echo -n $ROOT_TOKEN | base64)\"}}"
               else
-                ROOT_TOKEN=$(kubectl get secret vault-init-keys -n ${var.vault_namespace} -o jsonpath='{.data.root-token}' | base64 -d)
+                echo "Vault already initialized, retrieving saved keys..."
                 UNSEAL_KEY=$(kubectl get secret vault-init-keys -n ${var.vault_namespace} -o jsonpath='{.data.unseal-key}' | base64 -d)
-                vault operator unseal $UNSEAL_KEY
+                ROOT_TOKEN=$(kubectl get secret vault-init-keys -n ${var.vault_namespace} -o jsonpath='{.data.root-token}' | base64 -d)
               fi
 
+              echo "Unsealing Vault..."
+              curl -s -X PUT http://vault:8200/v1/sys/unseal \
+                -d "{\"key\":\"$UNSEAL_KEY\"}"
+
+              echo "Logging in..."
               vault login $ROOT_TOKEN
 
-              # Enable KV secrets engine
+              echo "Enabling KV secrets engine..."
               vault secrets enable -path=secret kv-v2 || true
 
-              # Store PostgreSQL credentials
+              echo "Storing PostgreSQL credentials..."
               vault kv put secret/finanzwerk/postgres \
                 username=${var.postgres_finanzwerk_owner_username} \
                 password=${var.postgres_finanzwerk_owner_password}
 
-              # Create policy
+              echo "Creating policy..."
               vault policy write finanzwerk-data - <<POLICY
               path "secret/data/finanzwerk/*" {
                 capabilities = ["read"]
               }
               POLICY
+
+              echo "Done!"
             EOT
           ]
 
+
           env {
             name  = "VAULT_ADDR"
-            value = "http://vault:8200"
+            value = "http://${var.vault_endpoint}"
           }
         }
       }
@@ -125,7 +143,7 @@ resource "kubernetes_role_v1" "vault_init" {
   rule {
     api_groups = [""]
     resources  = ["secrets"]
-    verbs      = ["create", "get"]
+    verbs      = ["create", "get", "patch"]
   }
 }
 

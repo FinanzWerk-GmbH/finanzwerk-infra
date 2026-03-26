@@ -2,12 +2,11 @@ variable "minikube_storage_class" {
   default = "standard"
 }
 
+
+# namespaces
 variable "nginx_ingress_classname" {
   default = "nginx"
 }
-
-
-# namespaces
 variable "data_core_namespace" {
   default = "data-core"
 }
@@ -29,8 +28,11 @@ variable "minio_root_username" {
 variable "minio_root_password" {
   default = "admin_password"
 }
-variable "minio_api_host" {
-  default = "minio-api.local"
+variable "minio_api_endpoint" {
+  default = "minio:9000"
+}
+variable "minio_console_ingress_host" {
+  default = "minio-console.127.0.0.1.nip.io"
 }
 variable "minio_initial_buckets" {
   type    = list(string)
@@ -64,6 +66,9 @@ variable "postgres_backup_s3_destination" {
 }
 
 # vault
-variable "vault_host" {
-  default = "vault.local"
+variable "vault_ingress_host" {
+  default = "vault.127.0.0.1.nip.io"
+}
+variable "vault_endpoint" {
+  default = "vault:8200"
 }

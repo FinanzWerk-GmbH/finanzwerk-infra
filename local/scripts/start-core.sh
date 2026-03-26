@@ -1,7 +1,7 @@
 #!/bin/bash
 minikube start \
   --cpus=4 \
-  --memory=10240 \
+  --memory=8192 \
   --disk-size=50g \
   --driver=docker
 
@@ -12,3 +12,8 @@ cd "$(dirname "$0")/.."
 
 minikube addons enable ingress
 minikube addons enable ingress-dns
+
+kubectl apply --server-side -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.29/releases/cnpg-1.29.0.yaml
+kubectl wait --for=condition=established crd/clusters.postgresql.cnpg.io --timeout=60s
+
+sudo -E minikube tunnel

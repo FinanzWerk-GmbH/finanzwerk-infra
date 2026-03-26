@@ -1,4 +1,5 @@
 resource "helm_release" "minio" {
+  depends_on = [kubernetes_namespace_v1.minio_namespace]
   name       = "minio"
   repository = "https://charts.min.io/"
   chart      = "minio"
@@ -21,14 +22,6 @@ resource "helm_release" "minio" {
       value = "256Mi"
     },
     {
-      name  = "ingress.enabled",
-      value = "true"
-    },
-    {
-      name  = "ingress.ingressClassName",
-      value = var.nginx_ingress_classname
-    },
-    {
       name  = "consoleIngress.enabled",
       value = "true"
     },
@@ -47,8 +40,8 @@ resource "helm_release" "minio" {
   ]
   set_list = [
     {
-      name  = "ingress.hosts",
-      value = [var.minio_api_host]
+      name  = "consoleIngress.hosts",
+      value = [var.minio_console_ingress_host]
     }
   ]
 }
@@ -58,7 +51,7 @@ resource "kubernetes_job_v1" "create_initital_minikube_buckets" {
   depends_on = [helm_release.minio]
   metadata {
     name      = "initial-minikube-buckets"
-    namespace = var.data_core_namespace
+    namespace = var.minio_namespace
   }
   spec {
     template {
@@ -69,7 +62,7 @@ resource "kubernetes_job_v1" "create_initital_minikube_buckets" {
           image = "minio/mc"
           command = ["/bin/sh", "-c",
             <<-EOT
-                    until mc alias set minio $MINIO_ENDPOINT $MINIO_ROOT_USER $MINIO_ROOT_PASSWORD; do
+                    until mc alias set finanzwerk $MINIO_ENDPOINT $MINIO_ROOT_USER $MINIO_ROOT_PASSWORD; do
                       echo "Waiting for MinIO..."
                       sleep 3
                     done
@@ -78,7 +71,7 @@ resource "kubernetes_job_v1" "create_initital_minikube_buckets" {
           ]
           env {
             name  = "MINIO_ENDPOINT"
-            value = "http://${var.minio_api_host}"
+            value = "http://${var.minio_api_endpoint}"
           }
           env {
             name  = "MINIO_ROOT_USER"

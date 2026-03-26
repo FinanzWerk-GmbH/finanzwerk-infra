@@ -1,17 +1,10 @@
-resource "helm_release" "postgres-cnpg-operator" {
-  name       = "postgres"
-  repository = "https://cloudnative-pg.github.io/charts"
-  chart      = "cnpg"
-  namespace  = var.postgres_namespace
-}
-
 resource "kubernetes_manifest" "postgres_cluster" {
   depends_on = [
-    helm_release.postgres-cnpg-operator,
     kubernetes_secret_v1.postgres_owner_credentials,
     kubernetes_secret_v1.readonly_user,
     kubernetes_secret_v1.readwrite_user,
     kubernetes_secret_v1.minio_credentials,
+    kubernetes_namespace_v1.postgres_namespace,
   ]
   manifest = {
     apiVersion = "postgresql.cnpg.io/v1"
@@ -54,7 +47,7 @@ resource "kubernetes_manifest" "postgres_cluster" {
       backup = {
         barmanObjectStore = {
           destinationPath = var.postgres_backup_s3_destination
-          endpointURL     = "http://${var.minio_api_host}"
+          endpointURL     = "http://${var.minio_api_endpoint}"
           s3Credentials = {
             accessKeyId = {
               name = "minio-credentials"
@@ -135,6 +128,8 @@ resource "kubernetes_job_v1" "grant_permissions" {
           command = [
             "/bin/sh", "-c",
             <<-EOT
+              CONNECTION_STRING="postgresql://${var.postgres_finanzwerk_owner_username}:$OWNER_PASSWORD@postgres-rw:5432/${var.postgres_finanzwerk_db}"
+
               until psql "$CONNECTION_STRING" -c '\q' 2>/dev/null; do
                 echo "Waiting for postgres..."
                 sleep 3
@@ -155,10 +150,6 @@ resource "kubernetes_job_v1" "grant_permissions" {
               SQL
             EOT
           ]
-          env {
-            name  = "CONNECTION_STRING"
-            value = "postgresql://${var.postgres_finanzwerk_owner_username}:$$(OWNER_PASSWORD)@postgres-rw:5432/${var.postgres_finanzwerk_db}"
-          }
           env {
             name = "OWNER_PASSWORD"
             value_from {
