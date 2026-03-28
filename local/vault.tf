@@ -125,6 +125,9 @@ resource "kubernetes_job_v1" "vault_init" {
       }
     }
   }
+  timeouts {
+    create = "5m"
+  }
 }
 
 

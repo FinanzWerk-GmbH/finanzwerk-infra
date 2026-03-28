@@ -67,6 +67,7 @@ resource "kubernetes_manifest" "postgres_cluster" {
 
 
 resource "kubernetes_secret_v1" "minio_credentials" {
+  depends_on = [kubernetes_namespace_v1.postgres_namespace]
   metadata {
     name      = "minio-credentials"
     namespace = var.postgres_namespace
@@ -78,6 +79,7 @@ resource "kubernetes_secret_v1" "minio_credentials" {
 }
 
 resource "kubernetes_secret_v1" "postgres_owner_credentials" {
+  depends_on = [kubernetes_namespace_v1.postgres_namespace]
   metadata {
     name      = "postgres-credentials"
     namespace = var.postgres_namespace
@@ -89,6 +91,7 @@ resource "kubernetes_secret_v1" "postgres_owner_credentials" {
 }
 
 resource "kubernetes_secret_v1" "readonly_user" {
+  depends_on = [kubernetes_namespace_v1.postgres_namespace]
   metadata {
     name      = "readonly-user-secret"
     namespace = var.postgres_namespace
@@ -100,6 +103,7 @@ resource "kubernetes_secret_v1" "readonly_user" {
 }
 
 resource "kubernetes_secret_v1" "readwrite_user" {
+  depends_on = [kubernetes_namespace_v1.postgres_namespace]
   metadata {
     name      = "readwrite-user-secret"
     namespace = var.postgres_namespace
@@ -162,6 +166,9 @@ resource "kubernetes_job_v1" "grant_permissions" {
         }
       }
     }
+  }
+  timeouts {
+    create = "5m"
   }
 }
 

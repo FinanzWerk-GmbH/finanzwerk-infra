@@ -85,4 +85,7 @@ resource "kubernetes_job_v1" "create_initital_minikube_buckets" {
       }
     }
   }
+  timeouts {
+    create = "5m"
+  }
 }
