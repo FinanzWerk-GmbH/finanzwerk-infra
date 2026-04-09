@@ -72,3 +72,17 @@ variable "vault_ingress_host" {
 variable "vault_endpoint" {
   default = "vault:8200"
 }
+
+# airflow
+variable "airflow_namespace" {
+  default = "airflow"
+}
+variable "airflow_git_repo" {
+  default = "https://github.com/your-org/finanzwerk-airflow"
+}
+variable "airflow_dbt_git_repo" {
+  default = "https://github.com/your-org/finanzwerk-dbt"
+}
+variable "airflow_ingress_host" {
+  default = "airflow.127.0.0.1.nip.io"
+}

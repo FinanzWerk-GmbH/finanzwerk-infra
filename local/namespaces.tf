@@ -18,3 +18,8 @@ resource "kubernetes_namespace_v1" "vault_namespace" {
     name = var.vault_namespace
   }
 }
+resource "kubernetes_namespace_v1" "airflow_namespace" {
+  metadata {
+    name = var.airflow_namespace
+  }
+}
