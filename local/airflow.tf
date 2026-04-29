@@ -141,7 +141,7 @@ resource "helm_release" "airflow" {
 
     env:
       - name: _PIP_ADDITIONAL_REQUIREMENTS
-        value: "astronomer-cosmos[dbt-postgres] soda-core-postgres dbt-postgres deltalake pandas pyarrow great-expectations"
+        value: "astronomer-cosmos[dbt-postgres] soda-core-postgres dbt-postgres deltalake pandas pyarrow great-expectations apache-airflow-providers-cncf-kubernetes"
       - name: PYTHONPATH
         value: /opt/airflow/dags/repo
       - name: MINIO_ENDPOINT

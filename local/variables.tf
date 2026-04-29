@@ -61,6 +61,9 @@ variable "postgres_finanzwerk_readonly_username" {
 variable "postgres_finanzwerk_readonly_password" {
   default = "readonly_password"
 }
+variable "postgres_debezium_password" {
+  default = "debezium_password"
+}
 variable "postgres_backup_s3_destination" {
   default = "s3://backups/postgres"
 }

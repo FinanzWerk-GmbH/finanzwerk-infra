@@ -3,6 +3,7 @@ resource "kubernetes_manifest" "postgres_cluster" {
     kubernetes_secret_v1.postgres_owner_credentials,
     kubernetes_secret_v1.readonly_user,
     kubernetes_secret_v1.readwrite_user,
+    kubernetes_secret_v1.debezium_user,
     kubernetes_secret_v1.minio_credentials,
     kubernetes_namespace_v1.postgres_namespace,
   ]
@@ -41,8 +42,22 @@ resource "kubernetes_manifest" "postgres_cluster" {
             ensure         = "present"
             login          = true
             passwordSecret = { name = "readwrite-user-secret" }
+          },
+          {
+            name           = "debezium"
+            ensure         = "present"
+            login          = true
+            replication    = true
+            passwordSecret = { name = "debezium-secret" }
           }
         ]
+      }
+      postgresql = {
+        parameters = {
+          wal_level             = "logical"
+          max_wal_senders       = "5"
+          max_replication_slots = "5"
+        }
       }
       backup = {
         barmanObjectStore = {
@@ -151,6 +166,22 @@ resource "kubernetes_job_v1" "grant_permissions" {
                 GRANT USAGE ON SCHEMA public TO ${var.postgres_finanzwerk_readwrite_username};
                 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ${var.postgres_finanzwerk_readwrite_username};
                 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ${var.postgres_finanzwerk_readwrite_username};
+
+                -- debezium (logical replication)
+                GRANT CONNECT ON DATABASE ${var.postgres_finanzwerk_db} TO debezium;
+                GRANT USAGE ON SCHEMA public TO debezium;
+                GRANT SELECT ON ALL TABLES IN SCHEMA public TO debezium;
+                ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO debezium;
+
+                DO \$\$
+                BEGIN
+                  IF NOT EXISTS (SELECT 1 FROM pg_replication_slots WHERE slot_name = 'debezium_slot') THEN
+                    PERFORM pg_create_logical_replication_slot('debezium_slot', 'pgoutput');
+                  END IF;
+                  IF NOT EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'debezium_pub') THEN
+                    EXECUTE 'CREATE PUBLICATION debezium_pub FOR ALL TABLES';
+                  END IF;
+                END \$\$;
               SQL
             EOT
           ]
