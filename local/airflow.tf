@@ -141,7 +141,9 @@ resource "helm_release" "airflow" {
 
     env:
       - name: _PIP_ADDITIONAL_REQUIREMENTS
-        value: "astronomer-cosmos[dbt-postgres] soda-core-postgres dbt-postgres deltalake pandas pyarrow great-expectations apache-airflow-providers-cncf-kubernetes"
+        value: "astronomer-cosmos[dbt-postgres] soda-core-postgres dbt-postgres deltalake pandas pyarrow great-expectations apache-airflow-providers-cncf-kubernetes mlflow"
+      - name: MLFLOW_TRACKING_URI
+        value: http://mlflow.${kubernetes_namespace_v1.data_tools_namespace.metadata[0].name}.svc.cluster.local:5000
       - name: PYTHONPATH
         value: /opt/airflow/dags/repo
       - name: MINIO_ENDPOINT

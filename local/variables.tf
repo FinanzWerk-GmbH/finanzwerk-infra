@@ -64,6 +64,10 @@ variable "postgres_finanzwerk_readonly_password" {
 variable "postgres_debezium_password" {
   default = "debezium_password"
 }
+
+variable "clickhouse_admin_password" {
+  default = "clickhouse_admin"
+}
 variable "postgres_backup_s3_destination" {
   default = "s3://backups/postgres"
 }
