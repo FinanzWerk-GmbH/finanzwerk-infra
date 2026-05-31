@@ -23,3 +23,8 @@ resource "kubernetes_namespace_v1" "airflow_namespace" {
     name = var.airflow_namespace
   }
 }
+resource "kubernetes_namespace_v1" "governance_namespace" {
+  metadata {
+    name = "governance"
+  }
+}
