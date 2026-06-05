@@ -27,6 +27,7 @@ resource "kubernetes_manifest" "postgres_cluster" {
           secret = {
             name = "postgres-credentials"
           }
+          postInitApplicationSQL = ["CREATE EXTENSION IF NOT EXISTS vector;"]
         }
       }
       managed = {
@@ -58,6 +59,7 @@ resource "kubernetes_manifest" "postgres_cluster" {
           max_wal_senders       = "5"
           max_replication_slots = "5"
         }
+        shared_preload_libraries = ["vector"]
       }
       backup = {
         barmanObjectStore = {

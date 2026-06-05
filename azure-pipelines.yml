@@ -1,0 +1,86 @@
+trigger: none  # manual only — infra changes are deliberate
+
+variables:
+  - group: finanzwerk-terraform-vars
+  - name: TF_DIR
+    value: cloud/
+
+stages:
+  - stage: Plan
+    displayName: Terraform Plan
+    jobs:
+      - job: terraform_plan
+        displayName: Init and plan
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - task: TerraformInstaller@1
+            inputs:
+              terraformVersion: '1.9.0'
+
+          - task: TerraformTaskV4@4
+            displayName: Init
+            inputs:
+              provider: aws
+              command: init
+              workingDirectory: $(TF_DIR)
+              backendServiceAWS: finanzwerk-aws-service-connection
+              backendAWSBucketName: $(tf_state_bucket)
+              backendAWSKey: finanzwerk/terraform.tfstate
+
+          - task: TerraformTaskV4@4
+            displayName: Plan
+            inputs:
+              provider: aws
+              command: plan
+              workingDirectory: $(TF_DIR)
+              commandOptions: -out=tfplan -var-file=environments/prod.tfvars
+              environmentServiceNameAWS: finanzwerk-aws-service-connection
+
+          - task: PublishPipelineArtifact@1
+            displayName: Save plan
+            inputs:
+              targetPath: $(TF_DIR)/tfplan
+              artifact: tfplan
+
+  - stage: Apply
+    displayName: Terraform Apply
+    dependsOn: Plan
+    condition: succeeded()
+    jobs:
+      - deployment: terraform_apply
+        displayName: Apply to production
+        pool:
+          vmImage: ubuntu-latest
+        environment: production  # approval gate configured in Azure DevOps UI
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: DownloadPipelineArtifact@2
+                  inputs:
+                    artifact: tfplan
+                    targetPath: $(TF_DIR)
+
+                - task: TerraformInstaller@1
+                  inputs:
+                    terraformVersion: '1.9.0'
+
+                - task: TerraformTaskV4@4
+                  displayName: Init
+                  inputs:
+                    provider: aws
+                    command: init
+                    workingDirectory: $(TF_DIR)
+                    backendServiceAWS: finanzwerk-aws-service-connection
+                    backendAWSBucketName: $(tf_state_bucket)
+                    backendAWSKey: finanzwerk/terraform.tfstate
+
+                - task: TerraformTaskV4@4
+                  displayName: Apply
+                  inputs:
+                    provider: aws
+                    command: apply
+                    workingDirectory: $(TF_DIR)
+                    commandOptions: tfplan
+                    environmentServiceNameAWS: finanzwerk-aws-service-connection
